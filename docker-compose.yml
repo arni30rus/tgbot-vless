@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  vless_bot:
+    build: .
+    container_name: vless_bot
+    restart: always
+    privileged: true # ОБЯЗАТЕЛЬНО для systemctl
+    stop_grace_period: 10s
+    stop_signal: SIGRTMIN+9
+    env_file:
+      - .env
+    volumes:
+      # Монтируем сокет Docker, чтобы systemctl работал
+      - /run/systemd:/run/systemd
+      - /run/lock:/run/lock
+      - /run/docker.sock:/run/docker.sock
+      - .:/app
+      - /etc/x-ui:/etc/x-ui
+    network_mode: "host"

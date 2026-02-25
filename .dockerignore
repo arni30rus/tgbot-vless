@@ -1,0 +1,36 @@
+# Переменные окружения (секреты)
+.env
+
+# Базы данных (не нужны в репозитории)
+*.db
+*.sqlite
+*.sqlite3
+
+# Виртуальное окружение (Python)
+venv/
+env/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE и редакторы
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Отладочные файлы
+xui_debug_page.html
+clean_ghosts.py
+fix_uuid.py
+reset_account.py
+clean_inactive_users.py
+clean_requests.py
+
+# Системные файлы
+.DS_Store
+Thumbs.db
