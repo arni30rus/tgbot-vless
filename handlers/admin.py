@@ -384,3 +384,28 @@ async def callback_exec_del_client(callback: CallbackQuery):
     except Exception as e:
         await callback.message.edit_text(f"❌ Ошибка при удалении: {e}")
 
+
+
+@router.message(Command("commands"))
+async def cmd_admin_commands(message: Message):
+    """Команда для админа: Выводит список всех доступных админ-команд"""
+    if message.from_user.id not in config.ADMINS_ID:
+        await message.answer("⛔ Эта команда только для администраторов.")
+        return
+
+    text = (
+        "🛠 <b>Список админ-команд:</b>\n\n"
+        "<b>Управление сервером:</b>\n"
+        "🔴 /reset_xray — Перезагрузить ядро Xray\n"
+        "🟢 /online — Показать, кто сейчас подключен к VPN\n\n"
+        
+        "<b>Управление клиентами:</b>\n"
+        "📋 /all_clients — Список всех клиентов в панели 3X-UI\n"
+        "🗑 /del_client &lt;email&gt; — Удалить клиента (пример: /del_client igor@from_bot)\n\n"
+        
+        "<b>Управление ботом:</b>\n"
+        "📤 /broadcast — Сделать рассылку всем пользователям бота\n"
+        "📖 /commands — Показать это сообщение"
+    )
+    
+    await message.answer(text, parse_mode="HTML")

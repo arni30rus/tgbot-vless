@@ -163,3 +163,30 @@ async def delete_client(email: str):
             data = resp.json()
             return data.get("success", False)
         return False
+
+async def check_client_exists(email: str):
+    """Проверяет, существует ли клиент в панели по email"""
+    if not config.XUI_API_TOKEN:
+        raise Exception("Ошибка: XUI_API_TOKEN не задан в файле .env!")
+        
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": config.XUI_BASE_URL,
+        "Referer": f"{config.XUI_BASE_URL}/",
+        "Authorization": f"Bearer {config.XUI_API_TOKEN}",
+        "Cookie": f"3x-ui={config.XUI_API_TOKEN}"
+    }
+
+    async with httpx.AsyncClient(verify=False, follow_redirects=True) as client:
+        url = f"{config.XUI_BASE_URL}/panel/api/clients/get/{email}"
+        resp = await client.get(url, headers=headers)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            # Если success=true и obj не пустой — клиент существует
+            if data.get("success") and data.get("obj"):
+                return True
+        return False
