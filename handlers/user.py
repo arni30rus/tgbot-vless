@@ -132,7 +132,6 @@ async def menu_my_account(message: Message):
 @router.message(Command("my_account"))
 async def cmd_my_account(message: Message):
     async with async_session_maker() as session:
-        # Получаем юзера и его активную заявку
         user_result = await session.execute(select(User).where(User.telegram_id == message.from_user.id))
         user = user_result.scalar_one_or_none()
 
@@ -148,34 +147,33 @@ async def cmd_my_account(message: Message):
             await message.answer("У вас нет активного аккаунта.", reply_markup=keyboards.get_main_menu_keyboard())
             return
 
-        # Формируем email, чтобы проверить в панели
         if user.username:
             clean_username = user.username.lstrip('@')
             email = f"{clean_username}@from_bot"
         else:
             email = f"tg_{user.telegram_id}@from_bot"
 
-        # Отправляем сообщение ожидания
         wait_msg = await message.answer("⏳ Проверяю статус вашего аккаунта в панели...")
         
         try:
-            # Проверяем, существует ли клиент в панели
             exists = await xui_api.check_client_exists(email)
             
             if not exists:
-                # Если клиента нет в панели (удалили вручную), обновляем БД бота
                 req.status = "deleted"
                 req.uuid = None
                 await session.commit()
                 
-                await wait_msg.edit_text(
+                # Удаляем сообщение "Проверяю статус..."
+                await wait_msg.delete()
+                
+                # И отправляем новое красивое сообщение с кнопками
+                await message.answer(
                     "❗️ <b>Ваш аккаунт был отозван или удален администратором.</b>\n\n"
                     "Вы можете запросить новый доступ.",
                     reply_markup=keyboards.get_main_menu_keyboard()
                 )
                 return
 
-            # Если все отлично, отдаем конфиг
             link = utils.generate_vless_link(req.uuid, f"VLESS-{req.user_id}")
             
             await wait_msg.delete()
