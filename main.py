@@ -6,6 +6,7 @@ from aiogram.enums import ParseMode
 from config import BOT_TOKEN
 from database import init_db
 from handlers import user, admin
+from aiogram.fsm.storage.memory import MemoryStorage
 
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -15,7 +16,7 @@ async def main():
     await init_db()
     
     bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
-    dp = Dispatcher()
+    dp = Dispatcher(storage=MemoryStorage())
     
     # ссылки на хендлеры
     dp.include_router(user.router)

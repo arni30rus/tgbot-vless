@@ -5,10 +5,9 @@ import aiosqlite
 import config
 
 async def create_user_in_xui(email: str):
-    """
-    Стабильная версия: Создает клиента через API.
-    Требует нажатия "Сохранить" в веб-интерфейсе для работы.
-    """
+    if not config.XUI_API_TOKEN:
+        raise Exception("Ошибка: XUI_API_TOKEN не задан в файле .env!")
+        
     new_uuid = str(uuid.uuid4())
     
     headers = {
@@ -17,48 +16,44 @@ async def create_user_in_xui(email: str):
         "Content-Type": "application/json",
         "X-Requested-With": "XMLHttpRequest",
         "Origin": config.XUI_BASE_URL,
-        "Referer": f"{config.XUI_BASE_URL}/"
+        "Referer": f"{config.XUI_BASE_URL}/",
+        "Authorization": f"Bearer {config.XUI_API_TOKEN}",
+        "Cookie": f"3x-ui={config.XUI_API_TOKEN}"
     }
 
-    # 1. Создаем пользователя через post
-    async with httpx.AsyncClient(verify=False) as client:
-        print("[DEBUG] Логин и создание клиента...")
-        login_resp = await client.post(
-            f"{config.XUI_BASE_URL}/login",
-            json={"username": config.XUI_USERNAME, "password": config.XUI_PASSWORD},
-            headers=headers
-        )
+    async with httpx.AsyncClient(verify=False, follow_redirects=True) as client:
+        print("[DEBUG] Создание клиента через новый API /clients/add...")
         
-        if login_resp.status_code != 200:
-            raise Exception("Ошибка логина")
-
-        if "3x-ui" in client.cookies:
-            headers["Cookie"] = f"3x-ui={client.cookies.get('3x-ui')}"
-
+        # Формируем payload согласно новой документации
         client_settings = {
-            "id": new_uuid,
             "email": email,
+            "id": new_uuid,  # UUID для VLESS
             "flow": config.CLIENT_FLOW, 
             "limitIp": 0,
-            "totalGB": 0
+            "totalGB": 0,
+            "expiryTime": 0, # 0 означает бесконечно
+            "enable": True
         }
         
         payload = {
-            "id": config.XUI_INBOUND_ID,
-            "settings": json.dumps({"clients": [client_settings]})
+            "client": client_settings,
+            "inboundIds": [config.XUI_INBOUND_ID] # Передаем как массив
         }
 
+        add_url = f"{config.XUI_BASE_URL}{config.XUI_ADD_CLIENT_PATH}"
+        print(f"[DEBUG] Отправляю запрос на: {add_url}")
+        
         add_resp = await client.post(
-            f"{config.XUI_BASE_URL}{config.XUI_ADD_CLIENT_PATH}",
+            add_url,
             json=payload,
             headers=headers
         )
 
         if add_resp.status_code != 200:
-            print(f"Ошибка API: {add_resp.text}")
+            print(f"Ошибка API добавления: Status: {add_resp.status_code}, Body: {add_resp.text}")
             raise Exception("Не удалось добавить клиента через API.")
 
-    # 2. Добавляем в статистику (INSERT OR IGNORE чтобы не было дублей)
+    # Обновляем статистику в БД (оставляем для надежности)
     try:
         async with aiosqlite.connect(config.XUI_DB_PATH) as db:
             cursor = await db.execute("PRAGMA table_info(client_traffics)")
@@ -78,15 +73,93 @@ async def create_user_in_xui(email: str):
             placeholders = ', '.join(['?'] * len(insert_values))
             cols_str = ', '.join(insert_cols)
             
-            # ВАЖНО: OR IGNORE предотвратит ошибку, если запись уже существует
             sql = f"INSERT OR IGNORE INTO client_traffics ({cols_str}) VALUES ({placeholders})"
             
             await db.execute(sql, insert_values)
             await db.commit()
-            print(f"[DEBUG] Статистика обновлена (или уже была).")
+            print(f"[DEBUG] Статистика обновлена.")
             
     except Exception as e:
         print(f"[WARNING] Ошибка статистики: {e}")
 
-    print("[DEBUG] Готово. Нажмите Сохранить в веб-интерфейсе.")
+    print("[DEBUG] Готово.")
     return new_uuid
+
+async def get_online_clients():
+    """Получает список email подключенных в данный момент клиентов"""
+    if not config.XUI_API_TOKEN:
+        raise Exception("Ошибка: XUI_API_TOKEN не задан в файле .env!")
+        
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": config.XUI_BASE_URL,
+        "Referer": f"{config.XUI_BASE_URL}/",
+        "Authorization": f"Bearer {config.XUI_API_TOKEN}",
+        "Cookie": f"3x-ui={config.XUI_API_TOKEN}"
+    }
+
+    async with httpx.AsyncClient(verify=False, follow_redirects=True) as client:
+        url = f"{config.XUI_BASE_URL}/panel/api/clients/onlines"
+        resp = await client.post(url, json={}, headers=headers)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj", [])
+        return []
+
+
+
+async def get_all_clients():
+    """Получает список всех клиентов из панели"""
+    if not config.XUI_API_TOKEN:
+        raise Exception("Ошибка: XUI_API_TOKEN не задан в файле .env!")
+        
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": config.XUI_BASE_URL,
+        "Referer": f"{config.XUI_BASE_URL}/",
+        "Authorization": f"Bearer {config.XUI_API_TOKEN}",
+        "Cookie": f"3x-ui={config.XUI_API_TOKEN}"
+    }
+
+    async with httpx.AsyncClient(verify=False, follow_redirects=True) as client:
+        url = f"{config.XUI_BASE_URL}/panel/api/clients/list"
+        resp = await client.get(url, headers=headers)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj", [])
+        return []
+
+async def delete_client(email: str):
+    """Удаляет клиента из панели по email"""
+    if not config.XUI_API_TOKEN:
+        raise Exception("Ошибка: XUI_API_TOKEN не задан в файле .env!")
+        
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": config.XUI_BASE_URL,
+        "Referer": f"{config.XUI_BASE_URL}/",
+        "Authorization": f"Bearer {config.XUI_API_TOKEN}",
+        "Cookie": f"3x-ui={config.XUI_API_TOKEN}"
+    }
+
+    async with httpx.AsyncClient(verify=False, follow_redirects=True) as client:
+        url = f"{config.XUI_BASE_URL}/panel/api/clients/del/{email}"
+        resp = await client.post(url, json={}, headers=headers)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("success", False)
+        return False
